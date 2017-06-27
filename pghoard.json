@@ -1,0 +1,32 @@
+{
+    "backup_location": "/var/lib/pghoard/metadata",
+    "backup_sites": {
+        "mzDebian": {
+            "active_backup_mode": "pg_receivexlog",
+            "nodes": [
+                {
+                    "host": "127.0.0.1",
+                    "password": "xxxxxxxxxxxxx",
+                    "port": 5433,
+                    "user": "pghoard"
+                }
+            ],
+            "object_storage": {
+                "project_id": "xxxxxxxxxxx",
+                "bucket_name": "bk-pghoard",
+                "credential_file": "/var/lib/pghoard/pg-backup-xxxxxxxxx.json",
+                "storage_type": "google"
+            },
+            "pg_data_directory": "/var/lib/postgresql/9.6/main",
+            "pg_bin_directory": "/usr/bin",
+            "basebackup_interval_hours": 5,
+            "basebackup_mode": "pipe"
+         }
+    },
+    "http_address": "127.0.0.1",
+    "http_port": 16000,
+    "log_level": "INFO",
+    "syslog": false,
+    "syslog_address": "/var/log/pghoard/",
+    "syslog_facility": "local2"
+}

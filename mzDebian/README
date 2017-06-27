@@ -1,0 +1,85 @@
+1. Google cloud storage, make bucket: bk-pghoard
+
+2. Instaluj pghoard (install pghoard)
+
+3. Instaluj gsutil (install gsutil):
+  pip install gsutil
+  gsutil config
+
+4. github -> /var/lib/pghoard
+  Uprav postgres verzi a port (9.6, 5433) ve všech souborech. Uprav databáze v bin/my_pg_dump.sh. Případně změň mzDebian -> xxx.
+  (Update postgres version and port (9.6, 5433) in all files. Set proper databases in bin/my_pg_dump.sh. Optionally rename mzDebian -> xxx.)
+
+5. Personalizuj xxxxxx v /var/lib/pghoard/*.json (pg-backup-xxxxxxx.json vygenerujte v Google consoli).
+  (Personalize xxxxxx settings in /var/lib/pghoard/*.json (pg-backup-xxxxxxx.json will generate Google console for you).)
+
+6. 
+  chown -R postgres:postgres /var/lib/pghoard
+  chown -R root:root /var/lib/pghoard/mzDebian/bin
+
+7. Zkopíruj conf/ do cloudu a do /etc/postgresql/9.6/main (případné změny si opět zazálohuj do /conf a cloudu).
+  (Copy conf/ to cloud and to /etc/postgresql/9.6/main (after next changes backup them again to /conf and cloud).)
+
+8. Cron, user postgres:
+  su - postgres
+  crontab -e
+    30 3 * * * /var/lib/pghoard/mzDebian/bin/my_pg_dump.sh
+    */2 * * * * /var/lib/pghoard/mzDebian/bin/sync_partial.sh
+
+9.
+  systemctl enable pghoard.service
+  systemctl start pghoard
+
+10.
+  check basebackup in the cloud
+  next day check pg_dump backup in the cloud
+    does pg_dump create non-empty files?
+      if empty, it probably ask password:
+        check /var/lib/postgresql/.pgpass
+          chown postgres:postgres /var/lib/postgresql/.pgpass
+          chmod 600 /var/lib/postgresql/.pgpass
+          content:
+            localhost:5433:*:postgres:password
+            127.0.0.1:5433:*.postgres:password
+            127.0.0.1:5433:replication:pghoard:password
+  how to set the password:
+    su - postgres
+    psql -p 5433
+    \password
+    \q
+
+
+PGDUMP RESTORE
+
+Pokud cluster běží, vypínáme ho v pgd_restore.
+Starý cluster je odstraněn zcela a proto kopírujeme konfigurace do /etc/...
+Pokud je lokální záloha poškozena, z cloudu ji nejprve obnov manuálně.
+
+If cluster is still working, we shut them down in pgd_restore.
+Old cluster is completely removed and .conf files are copied from backup into /etc/...
+If local files are lost, restore them from cloud first by hand.
+
+./pgd_restore.sh         -- (zahrnuje i případné odstavení serveru; contains stopping of the server too)
+./pgh_restore_after.sh   -- basebackup pro pghoard (bb for pgh)
+
+
+PGHOARD RESTORE
+
+Pokud cluster a/nebo pghoard běží, vypínáme ho v pgh_restore_before.
+Neřešíme /etc/... Pokud je konfigurace poškozena (a vytváříš úplně nový cluster), obnov ji z conf/ nebo cloudu
+
+If cluster and/or pghoard is still working, we shut them down in pgh_restore_before.
+We do not touch /etc/... If it is damaged (and you build a completely new cluster), copy configs from conf/ or from cloud.
+
+
+./pgh_restore_before.sh  -- odstavení serveru (stopping of the server+pghoard)
+./pgh_restore_1.sh       -- rozbalení basebackupu (apply basebackup)
+  ./pgh_restore_1b.sh      -- nakopírování z cloudu do localcopy partial/ (vynechat, pokud mám partial/ nebo xlog_incoming/ ok)
+                           -- (add partial wal/xlog from cloud into partial/ (skip if you have partial/ or xlog_incoming/ well)
+  ./pgh_restore_1c.sh      -- nakopírování z localcopy do xlog_incoming/ (vynechat, pokud mám xlog_incoming/ ok, ale odstraň .partial příponu)
+                           -- (add partial wal/xlog from partial/ into xlog_incoming/ (skip if you have xlog_incoming/ well, but remove .partial extension)
+./pgh_restore_2.sh       -- aplikovat pozdější změny (apply wal logs - changes after basebackup)
+./pgh_restore_after.sh   -- nový basebackup; je potřeba, když aplikujeme .partial (new basebackup; required if we apply the .partial file)
+
+pozn.: záloha rozpracovaného souboru se ztratí, ale _1 dávky by ji měly přesunout do partial_backup/
+(note: backup of the .partial wal/log is removed, but _1 tasks should backup it into partial_backup/)

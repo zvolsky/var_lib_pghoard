@@ -1,0 +1,2 @@
+Auto-created by pgh_restore_1x.sh tasks.
+This is for backup of the last partial wal/xlog during/after the restore, because the file is deleted in the restore processing.

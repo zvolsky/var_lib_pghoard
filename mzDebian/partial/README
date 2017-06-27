@@ -1,0 +1,2 @@
+This is for backup of last partial wal/xlog.
+Using cron (*/2 min) we move to here the file from metadata/backupname/xlog_incoming and then we move them to Google cloud storage.

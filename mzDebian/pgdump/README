@@ -1,0 +1,2 @@
+For pg_dump(all) backups.
+Restore using bin/restore/pgd_restore.sh + pgh_restore_after.sh (new basebackup).
