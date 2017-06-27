@@ -1,4 +1,4 @@
-# var_log_pghoard
+# var_lib_pghoard
 debian pghoard working folder incl. cron, pgdump backup to Google cloud storage and restore hints
 
 ## Postgres backup solution
