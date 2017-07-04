@@ -1,12 +1,15 @@
 1. Google cloud storage, make bucket: bk-pghoard
 
 2. Instaluj pghoard (install pghoard)
+  + python3-psycopg2, python3-requests, python3-snappy, python3-systemd
+  + cloud storage package(s), see github.com/ohmu/pghoard
+  +? python3-flake8, pylint3, python3-pytest
 
 3. Instaluj gsutil (install gsutil):
   pip install gsutil
   gsutil config
 
-4. github -> /var/lib/pghoard
+4. github zvolsky/var_lib_pghoard -> /var/lib/pghoard
   Uprav postgres verzi a port (9.6, 5433) ve všech souborech. Uprav databáze v bin/my_pg_dump.sh. Případně změň mzDebian -> xxx.
   (Update postgres version and port (9.6, 5433) in all files. Set proper databases in bin/my_pg_dump.sh. Optionally rename mzDebian -> xxx.)
 
@@ -17,20 +20,29 @@
   chown -R postgres:postgres /var/lib/pghoard
   chown -R root:root /var/lib/pghoard/mzDebian/bin
 
-7. Zkopíruj conf/ do cloudu a do /etc/postgresql/9.6/main (případné změny si opět zazálohuj do /conf a cloudu).
-  (Copy conf/ to cloud and to /etc/postgresql/9.6/main (after next changes backup them again to /conf and cloud).)
+7.
+  /etc/postgresql/9.6/main/pg_hba.conf:
+    # TYPE  DATABASE     USER     ADDRESS       METHOD
+    local   all          pghoard                md5
+    local   replication  pghoard                md5
+    host    replication  pghoard  127.0.0.1/32  md5
+  /etc/postgresql/9.6/main/postgresql.conf:
+    wal_level = replica (or 'archive' if not supported)
+    max_wal_senders = 3
+    max_replication_slots = 2
+    archive_mode = off
+    archive_timeout = 600 # how often close wal/xlog file
 
-8. Cron, user postgres:
-  su - postgres
-  crontab -e
-    30 3 * * * /var/lib/pghoard/mzDebian/bin/my_pg_dump.sh
-    */2 * * * * /var/lib/pghoard/mzDebian/bin/sync_partial.sh
+8. Zálohuj /etc/.../*.conf/ do conf/ a do cloudu.
+  (Backup /etc/.../*.conf/ into conf/ and into cloud.)
 
-9.
+9. CREATE USER pghoard PASSWORD 'XXXXXXXXXX' REPLICATION;
+
+10.
   systemctl enable pghoard.service
   systemctl start pghoard
 
-10.
+11.
   check basebackup in the cloud
   next day check pg_dump backup in the cloud
     does pg_dump create non-empty files?
@@ -47,6 +59,29 @@
     psql -p 5433
     \password
     \q
+
+12. Cron, user postgres:
+  su - postgres
+  crontab -e
+    30 3 * * * /var/lib/pghoard/mzDebian/bin/my_pg_dump.sh
+    */8 * * * * /var/lib/postgresql/Dropbox/dropbox.py start -i
+
+13. Dropbox
+  register Dropbox (I use admin@server.xx, where on Wedos I have redirect to my standard address); https://www.dropbox.com/getspace
+  see: www.dropbox.com/install (install for Linux; Dropbox Headless Install via command line)
+    su - postgres
+    cd ~ && wget -O - "https://www.dropbox.com/download?plat=lnx.x86_64" | tar xzf -
+    ~/.dropbox-dist/dropboxd
+  copy the offered link into any browser (can run on other machine) and fill required; after that server displays that it is connected; directory ~/Dropbox now exists.
+  get pg_xlog/ into ~/Dropbox folder:
+    assuming pghoard+receivexlog is used
+    ln -s /var/lib/pghoard/metadata/mzDebian/xlog_incoming/ /var/lib/postgresql/Dropbox/mzDebian/ (will create xlog_incoming/ inside)
+  (into ~/Dropbox or so) download the dropbox.py (dropbox.com/install, bellow, Download python script)
+    user can be root
+    chmod +x /var/lib/postgresql/Dropbox/dropbox.py
+  (su - postgres:) ./dropbox.py start -i
+    maybe limit upload speed kB/s (but dropbox uses some auto handling): ./dropbox.py throttle unlimited 512
+  use some auto-starting (like */8 in cron -- stupid but working)
 
 
 PGDUMP RESTORE
@@ -74,12 +109,6 @@ We do not touch /etc/... If it is damaged (and you build a completely new cluste
 
 ./pgh_restore_before.sh  -- odstavení serveru (stopping of the server+pghoard)
 ./pgh_restore_1.sh       -- rozbalení basebackupu (apply basebackup)
-  ./pgh_restore_1b.sh      -- nakopírování z cloudu do localcopy partial/ (vynechat, pokud mám partial/ nebo xlog_incoming/ ok)
-                           -- (add partial wal/xlog from cloud into partial/ (skip if you have partial/ or xlog_incoming/ well)
-  ./pgh_restore_1c.sh      -- nakopírování z localcopy do xlog_incoming/ (vynechat, pokud mám xlog_incoming/ ok, ale odstraň .partial příponu)
-                           -- (add partial wal/xlog from partial/ into xlog_incoming/ (skip if you have xlog_incoming/ well, but remove .partial extension)
+Download .partial from Dropbox into metadata/site/xlog_incoming + remove extension .partial
 ./pgh_restore_2.sh       -- aplikovat pozdější změny (apply wal logs - changes after basebackup)
 ./pgh_restore_after.sh   -- nový basebackup; je potřeba, když aplikujeme .partial (new basebackup; required if we apply the .partial file)
-
-pozn.: záloha rozpracovaného souboru se ztratí, ale _1 dávky by ji měly přesunout do partial_backup/
-(note: backup of the .partial wal/log is removed, but _1 tasks should backup it into partial_backup/)
